@@ -1,0 +1,67 @@
+---
+title: "Case Study"
+author: "Beck Addison"
+date: "10/12/2021"
+output: pdf_document
+---
+
+```{r import-packages}
+library(tidyverse)
+```
+
+```{r data-import}
+train <- read_csv('data/data-train.csv')
+test <- read_csv('data/data-test.csv')
+```
+
+```{r data-manipulation}
+train_aug <- train %>%
+  mutate(
+    mean = R_moment_1,
+    variance = R_moment_2 - R_moment_1^2,
+    skewness = R_moment_3^2/R_moment_2^2,
+    kurtosis = R_moment_4/R_moment_2^2
+  ) 
+
+train_long <- train_aug %>%
+  pivot_longer(cols = c(mean, variance, skewness, kurtosis), names_to = 'statistic', values_to = 'statistic_value') %>%
+  pivot_longer(cols = c(St, Re, Fr), names_to = 'predictor', values_to = 'predictor_value') %>%
+  mutate(
+    statistic = fct_relevel(statistic, c('mean', 'variance', 'skewness', 'kurtosis')),
+    predictor = fct_relevel(predictor, c('Re', 'St', 'Fr'))
+  )
+```
+
+```{r EDA-chart-1, fig.width = 16}
+train_long %>%
+  ggplot(aes(
+    x = as.factor(predictor_value),
+    y = statistic_value,
+    color = statistic
+  )) +
+  geom_boxplot() +
+  facet_wrap(vars(predictor, statistic), scales = "free") +
+  labs(
+    title = "Distribution Statistics across values of Fr, St, and Re",
+    x = "Fr",
+    y = "Statistic Value"
+  )
+```
+
+This table of graphs suggests the following key notes:
+
+1. The mean, variance, and skewness of the distribution of cluster volumes drops significantly as `Re` increases, while kurtosis appears to increase (polynomially?).
+
+2. There isn't a strong trend for `St` except to note that, as it increases, the maximum value of the mean, variance, and skewness increases fairly dramatically, but the kurtosis falls steadily. 
+
+3. The mean of the particle cluster volume remains mostly consistent for values of `Fr`, but the variance and skewness drop quickly. The kurtosis with respect to `Fr` doesn't seem to have a clear trend.
+
+Other things to note include:
+
+1. The variance and skewness of the distribution doesn't seem to be dependent on `St`. The mean and particularly the kurtosis of the distribution does appear to have some relationship with `St`, however, though kurtosis seems more closely related than the variance in what appears to be a roughly linear decline.
+
+2. `Re` evokes a strong change in all of the distribution statistics as it increases, sharply reducing the variance in their distributions. I'd hypothesize that `Re` has a quadratic or otherwise polynomial effect on the distribution of the particle size, since it appears to change the variance and skewness of the set so sharply. 
+
+3. `Fr` evokes similar changes in the variance and skewness of the distribution as `Re`, but not in the kurtosis and mean. This could mean there is some interaction effect in the second moment of the data between `Re` and `St`.
+
+
