@@ -1,6 +1,6 @@
 ---
 title: "Case Study"
-author: "Beck Addison"
+author: "Beck Addison and Marian Simo"
 date: "10/12/2021"
 output: pdf_document
 ---
@@ -24,8 +24,10 @@ train_aug <- train %>%
   ) 
 
 train_long <- train_aug %>%
-  pivot_longer(cols = c(mean, variance, skewness, kurtosis), names_to = 'statistic', values_to = 'statistic_value') %>%
-  pivot_longer(cols = c(St, Re, Fr), names_to = 'predictor', values_to = 'predictor_value') %>%
+  pivot_longer(cols = c(mean, variance, skewness, kurtosis), 
+               names_to = 'statistic', values_to = 'statistic_value') %>%
+  pivot_longer(cols = c(St, Re, Fr), 
+               names_to = 'predictor', values_to = 'predictor_value') %>%
   mutate(
     statistic = fct_relevel(statistic, c('mean', 'variance', 'skewness', 'kurtosis')),
     predictor = fct_relevel(predictor, c('Re', 'St', 'Fr'))
@@ -64,4 +66,73 @@ Other things to note include:
 
 3. `Fr` evokes similar changes in the variance and skewness of the distribution as `Re`, but not in the kurtosis and mean. This could mean there is some interaction effect in the second moment of the data between `Re` and `St`.
 
+
+```{r data-transformation, echo=FALSE}
+# account for the inf in Fr to be able to model
+train$Fr[train$Fr==Inf] <- 1
+```
+
+```{r linear-regression-R1, echo=FALSE, results=FALSE}
+r1.lm.fit <- lm(R_moment_1 ~ St + Re + Fr, data = train)
+summary(r1.lm.fit)
+par(mfrow=c(2,2))
+plot(r1.lm.fit, which=c(2,1))
+```
+```{r linear-regression-R2, echo=FALSE, results=FALSE}
+r2.lm.fit <- lm(R_moment_2 ~ St + Re + Fr, data = train)
+summary(r2.lm.fit)
+par(mfrow=c(2,2))
+plot(r2.lm.fit, which=c(2,1))
+```
+
+
+```{r linear-regression-R3, echo=FALSE, results=FALSE}
+r3.lm.fit <- lm(R_moment_3 ~ St + Re + Fr, data = train)
+summary(r3.lm.fit)
+par(mfrow=c(2,2))
+plot(r3.lm.fit, which=c(2,1))
+```
+
+
+```{r linear-regression-R4, echo=FALSE, results=FALSE}
+r4.lm.fit <- lm(R_moment_4 ~ St + Re + Fr, data = train)
+summary(r4.lm.fit)
+par(mfrow=c(2,2))
+plot(r4.lm.fit, which=c(2,1))
+```
+
+These attempts of linear regression suggests the following key notes:
+
+1. Using the Residual Standard Error and Adjusted $R^2$, they suggest a simple linear regression model does not fit the data well. Raw moments 2, 3, and 4 suffer from a large RSE and very low $R^2$ values. Raw moment 1 has a higher $R^2$ value of 0.6271 and a much lower RSE value of 0.0341; however, those values are indicative of weak linearity.
+
+2. Looking at the residual plots, for all 4 raw moments it appears a linear model does fit well up until larger values of the response variable. This could be indicative of a needed transformation for the response values.
+
+3. The QQ plots for raw moments 2, 3, and 4 also suggest linearity up until the larger values of the response variables. The QQ plot of raw moment 1 follows a "S" pattern that could suggest under-dispersed data.
+
+```{r non-linear-regression-attempt-R1, echo=FALSE, results=FALSE}
+r1.nl.fit <- lm(R_moment_1 ~ polym(St, Re, Fr, degree=2), data = train)
+summary(r1.nl.fit)
+par(mfrow=c(2,2))
+plot(r1.nl.fit, which=c(2,1))
+```
+
+
+```{r non-linear-regression-attempt-R2-R4, echo=FALSE, results=FALSE, fig.show='hide'}
+r2.nl.fit <- lm(R_moment_2 ~ polym(St, Re, Fr, degree=2), data = train)
+summary(r2.nl.fit)
+r3.nl.fit <- lm(R_moment_3 ~ polym(St, Re, Fr, degree=2), data = train)
+summary(r3.nl.fit)
+r4.nl.fit <- lm(R_moment_4 ~ polym(St, Re, Fr, degree=2), data = train)
+summary(r4.nl.fit)
+par(mfrow=c(2,2))
+plot(r3.nl.fit, which=c(2,1))
+plot(r2.nl.fit, which=c(2,1))
+plot(r4.nl.fit, which=c(2,1))
+```
+
+Attempting polynomial regression suggests the following key notes: 
+
+1. Polynomial regression only benefited raw moment 1, increasing its adjusted $R^2$ to 0.9646 and reducing its RSE to 0.01051. The QQ plot now follows a more linear pattern and the residual vs fitted plot also better follows the line of best fit. Thus, this suggests a polynomial model is better suited for raw moment 1.
+
+2. Raw moments 2, 3, and 4 did not benefit from a polynomial model, each still suffered from a low $R^2$ and very high RSE.
 
