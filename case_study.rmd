@@ -22,7 +22,7 @@ train <- read_csv('data/data-train.csv')
 test <- read_csv('data/data-test.csv')
 ```
 
-```{r data-manipulation}
+```{r data-manipulation, message=FALSE, warning=FALSE}
 train_aug <- train %>%
   mutate(
     mean = R_moment_1,
@@ -42,6 +42,45 @@ train_long <- train_aug %>%
   )
 ```
 
+```{r data-transformation}
+# account for the inf in Fr to be able to model
+train_aug <- train_aug %>%
+  mutate(
+    Fr = case_when(
+    Fr == Inf ~ 1,
+    TRUE ~ Fr)
+  )
+```
+
+```{r regressions, message=FALSE, include=FALSE}
+moment_regression_fits <- train_aug %>%
+  dplyr::select(!c(mean, variance, skewness, kurtosis)) %>%
+  pivot_longer(cols = starts_with('R_moment'), names_to = 'moment', values_to = 'moment_value') %>%
+  group_by(moment) %>%
+  nest() %>%
+  mutate( # generate linear models
+    lm.fit.no_interactions = map(data, ~ lm(moment_value ~ St + Re + Fr, .)),
+    lm.fit.two_way = map(data, ~ stepAIC(lm(moment_value ~ .^2, .), direction = 'backward')),
+    nl.fit.two_degree = map(data, ~ lm(moment_value ~ polym(St, Re, Fr, degree=2), .))
+  ) %>%
+  mutate( # generate summaries from the linear models
+    across(starts_with('lm') | starts_with('nl'), ~map(.x, ~summary(.x)), .names = '{.col}.summary')
+  )
+
+statistic_regression_fits <- train_aug %>%
+  dplyr::select(!starts_with('R_moment')) %>%
+  pivot_longer(cols = !c(Re, St, Fr), names_to = 'statistic', values_to = 'statistic_value') %>%
+  group_by(statistic) %>%
+  nest() %>%
+  mutate( # generate linear models
+    lm.fit.no_interactions = map(data, ~ lm(statistic_value ~ St + Re + Fr, .)),
+    lm.fit.two_way = map(data, ~ stepAIC(lm(statistic_value ~ .^2, .), direction = 'backward')),
+    nl.fit.two_degree = map(data, ~ lm(statistic_value ~ polym(St, Re, Fr, degree=2), .))
+  ) %>%
+  mutate( # generate summaries from the linear models
+    across(starts_with('lm') | starts_with('nl'), ~map(.x, ~summary(.x)), .names = '{.col}.summary')
+  )
+```
 # Introduction
 
 The task of modeling turbulent fluid systems has consistently been one of the most difficult problems to solve in modern mathematics and physics; in fact, despite over two centuries of concerted research into the topic, no analytical method currently exists to accurately predict the evolution of turbulent systems over time.
@@ -63,6 +102,8 @@ To fulfill the objectives we pose in our introduction, we must collect more info
 
 Our goal here is not only to make interpretations of our model predictions simpler but also to attempt to find some distribution that connects these outputs to our input parameters. To do this, we must first examine how these model characteristics are distributed in our dataset.
 
+Nevertheless, we performed the same analysis on the raw moments in parallel to avoid oversimplifying the problem and so that we could provide correct predicted values (since we are predicting raw moments, *not* these statistics).
+
 ```{r EDA-chart-1, fig.height = 10, fig.width = 16}
 train_long %>%
   ggplot(aes(
@@ -73,11 +114,19 @@ train_long %>%
   geom_boxplot() +
   facet_wrap(vars(predictor, statistic), scales = "free") +
   labs(
-    title = "Distribution Statistics across values of Fr, St, and Re",
+    title = "Figure 1. Distribution Statistics across values of Fr, St, and Re",
     x = "Fr",
     y = "Statistic Value"
   )
 ```
+We noted from our EDA that the variance and skewness of the dataset appeared to drop dramatically with increasing values of $Fr$ and of $Re$, and that there seemed to be a possible interaction between 
+
+
+
+# References
+<div id = 'refs'></div>
+
+# Appendix A: Notes on the EDA chart
 
 This table of graphs suggests the following key notes:
 
@@ -95,57 +144,25 @@ Other things to note include:
 
 3. `Fr` evokes similar changes in the variance and skewness of the distribution as `Re`, but not in the kurtosis and mean. This could mean there is some interaction effect in the second moment of the data between `Re` and `St`.
 
+# Appendix B: Residual and Q-Q Plots 
 
-```{r data-transformation, echo=FALSE}
-# account for the inf in Fr to be able to model
-train_aug <- train_aug %>%
-  mutate(
-    Fr = case_when(
-    Fr == Inf ~ 1,
-    TRUE ~ Fr)
-  )
+## Raw Moments as Response Variables
+
+```{r moment-data}
+data = moment_regression_fits
+names = data$moment
 ```
 
-```{r linear-regression-R1, echo=FALSE, results=FALSE}
-moment_regression_fits <- train_aug %>%
-  dplyr::select(!c(mean, variance, skewness, kurtosis)) %>%
-  pivot_longer(cols = starts_with('R_moment'), names_to = 'moment', values_to = 'moment_value') %>%
-  group_by(moment) %>%
-  nest() %>%
-  mutate( # generate linear models
-    lm.fit.no_interactions = map(data, ~ lm(moment_value ~ St + Re + Fr, .)),
-    lm.fit.two_way = map(data, ~ lm(moment_value ~ .^2, .)),
-    nl.fit.two_degree = map(data, ~ lm(moment_value ~ polym(St, Re, Fr, degree=2), .))
-  ) %>%
-  mutate(
-    across(starts_with('lm') | starts_with('nl'), ~map(.x, ~summary(.x)), .names = '{.col}.summary'),
-    across()
-  )
-```
+### Linear Models, No Interactions
 
-
-```{r moments, echo=FALSE, results=FALSE}
+```{r lm-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
-for (lin_fit in moment_regression_fits$lm.fit.no_interactions) {
-  plot(lin_fit, which = c(2, 1))
-}
+pwalk(list(data$lm.fit.no_interactions, names), ~ plot(..1, which = c(2, 1)))
+
+walk(data$lm.fit.no_interactions, ~tidy(summary(.x)))
 ```
 
-
-```{r linear-regression-R3, echo=FALSE, results=FALSE}
-r3.lm.fit <- lm(R_moment_3 ~ St + Re + Fr, data = train_aug)
-summary(r3.lm.fit)
-par(mfrow=c(2,2))
-plot(r3.lm.fit, which=c(2,1))
-```
-
-
-```{r linear-regression-R4, echo=FALSE, results=FALSE}
-r4.lm.fit <- lm(R_moment_4 ~ St + Re + Fr, data = train_aug)
-summary(r4.lm.fit)
-par(mfrow=c(2,2))
-plot(r4.lm.fit, which=c(2,1))
-```
+In the graphs above, we've plotted the residuals and Normal Q-Q plots for all of our linear regressions where each of the raw moments represents a response variable to the three predictors $<Re, Fr, St>$. The first row represents information with the first raw moment as the response, the second row represents the second raw moment, and so on. For this first assessment, we have no interaction variables.
 
 These attempts of linear regression suggests the following key notes:
 
@@ -155,50 +172,12 @@ These attempts of linear regression suggests the following key notes:
 
 3. The QQ plots for raw moments 2, 3, and 4 also suggest linearity up until the larger values of the response variables. The QQ plot of raw moment 1 follows a "S" pattern that could suggest under-dispersed data.
 
-```{r non-linear-regression-attempt-R1, echo=FALSE, results=FALSE}
-r1.nl.fit <- lm(R_moment_1 ~ polym(St, Re, Fr, degree=2), data = train)
-summary(r1.nl.fit)
-par(mfrow=c(2,2))
-plot(r1.nl.fit, which=c(2,1))
+### Linear Models, 2-Way interactions with backward stepwise selection optimizing AIC
+
+```{r two-way-plots-moments, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$lm.fit.two_way, names), ~ plot(..1, which = c(2, 1)))
 ```
-
-
-```{r non-linear-regression-attempt-R2-R4, echo=FALSE, results=FALSE, fig.show='hide'}
-r2.nl.fit <- lm(R_moment_2 ~ polym(St, Re, Fr, degree=2), data = train)
-summary(r2.nl.fit)
-r3.nl.fit <- lm(R_moment_3 ~ polym(St, Re, Fr, degree=2), data = train)
-summary(r3.nl.fit)
-r4.nl.fit <- lm(R_moment_4 ~ polym(St, Re, Fr, degree=2), data = train)
-summary(r4.nl.fit)
-par(mfrow=c(2,2))
-plot(r3.nl.fit, which=c(2,1))
-plot(r2.nl.fit, which=c(2,1))
-plot(r4.nl.fit, which=c(2,1))
-```
-
-Attempting polynomial regression suggests the following key notes: 
-
-1. Polynomial regression only benefited raw moment 1, increasing its adjusted $R^2$ to 0.9646 and reducing its RSE to 0.01051. The QQ plot now follows a more linear pattern and the residual vs fitted plot also better follows the line of best fit. Thus, this suggests a polynomial model is better suited for raw moment 1.
-
-2. Raw moments 2, 3, and 4 did not benefit from a polynomial model, each still suffered from a low $R^2$ and very high RSE.
-
-```{r R2 interaction terms, echo=FALSE, results=FALSE}
-r2.lm.interact <- lm(R_moment_2 ~ .^2 , data = subset(train, select = -c(R_moment_1,R_moment_3, R_moment_4)))
-stepAIC(r2.lm.interact,direction="backward")
-```
-
-
-```{r R3 interaction terms, echo=FALSE, results=FALSE}
-r3.lm.interact <- lm(R_moment_3 ~ .^2 , data = subset(train, select = -c(R_moment_1,R_moment_2, R_moment_4)))
-stepAIC(r3.lm.interact,direction="backward")
-```
-
-
-```{r R4 interaction terms, echo=FALSE, results=FALSE}
-r4.lm.interact <- lm(R_moment_4 ~ .^2 , data = subset(train, select = -c(R_moment_1,R_moment_2, R_moment_3)))
-stepAIC(r4.lm.interact,direction="backward")
-```
-
 
 Important takeaways from backward selection:
 
@@ -207,6 +186,45 @@ Important takeaways from backward selection:
 2. Both raw moment 3 and 4 contain all 3 interaction terms whereas raw moment 2 leaves out the interaction between St and Re.
 
 
-# References
-<div id = 'refs'></div>
+### Nonlinear Models, 2-degree polynomials
 
+```{r nonlinear-plots-moments, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$nl.fit.two_degree, names), ~ plot(..1, which = c(2, 1)))
+```
+
+Here again, we now compare a set of 2-degree nonlinear polynomial regression models, again with each of the raw moments as response variables to the predictor set from before.
+
+Attempting polynomial regression suggests the following key notes: 
+
+1. Polynomial regression only benefited raw moment 1, increasing its adjusted $R^2$ to 0.9646 and reducing its RSE to 0.01051. The QQ plot now follows a more linear pattern and the residual vs fitted plot also better follows the line of best fit. Thus, this suggests a polynomial model is better suited for raw moment 1.
+
+2. Raw moments 2, 3, and 4 did not benefit from a polynomial model, each still suffered from a low $R^2$ and very high RSE.
+
+## Mean/Variance/Skewness/Kurtosis as Response Variables
+
+```{r stat-data}
+data = statistic_regression_fits
+names = data$statistic
+```
+
+### Linear Models, No Interactions
+
+```{r lm-plots-stats, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$lm.fit.no_interactions, names), ~ plot(..1, which = c(2, 1)))
+```
+
+### Linear Models, 2-Way interactions with backward stepwise selection optimizing AIC
+
+```{r two-way-plots-stats, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$lm.fit.two_way, names), ~ plot(..1, which = c(2, 1)))
+```
+
+### Nonlinear Models, 2-degree polynomials
+
+```{r nonlinear-plots-stats, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$nl.fit.two_degree, names), ~ plot(..1, which = c(2, 1)))
+```
