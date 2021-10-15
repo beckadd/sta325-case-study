@@ -2,11 +2,18 @@
 title: "Case Study"
 author: "Beck Addison and Marian Simo"
 date: "10/12/2021"
-output: pdf_document
+output:
+  pdf_document: default
+bibliography: case_study_refs.bib
 ---
+
+```{r global-options, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
 
 ```{r import-packages, message=FALSE}
 library(tidyverse)
+library(broom)
 library(MASS)
 ```
 
@@ -20,7 +27,7 @@ train_aug <- train %>%
   mutate(
     mean = R_moment_1,
     variance = R_moment_2 - R_moment_1^2,
-    skewness = R_moment_3^2/R_moment_2^2,
+    skewness = (R_moment_3/R_moment_2)^2,
     kurtosis = R_moment_4/R_moment_2^2
   ) 
 
@@ -35,7 +42,28 @@ train_long <- train_aug %>%
   )
 ```
 
-```{r EDA-chart-1, fig.width = 16}
+# Introduction
+
+The task of modeling turbulent fluid systems has consistently been one of the most difficult problems to solve in modern mathematics and physics; in fact, despite over two centuries of concerted research into the topic, no analytical method currently exists to accurately predict the evolution of turbulent systems over time.
+
+Nevertheless, the successful simulation of turbulent systems remains uniquely essential to a diverse array of sciences and industries with common use cases including modeling airflow in aerodynamic design, analyzing blood flow in medicine [@blood-flow], and meteorological forecasting [@meteorological-forecasting]. To perform this simulation, high-resolution direct numerical simulation (DNS) is typically performed using the Navier-Stokes equation, but this is often very complex and computationally expensive to perform on any arbitrary set of inputs. In this case study, we circumvent these time-intensive simulation techniques by interpolating a set of results collected from Navier-Stokes DNS to produce a predictive model given a set of input parameters. Our objectives are therefore as follows:
+
+- Given a set of training and test data describing the inputs of a DNS simulation, namely the Reynolds Number $Re$, the gravitational acceleration $Fr$, and the Stokes number $St$, generate a model or set of models that can accurately predict the particle cluster volume distribution in terms of four moments used as dependent variables. We will call this our *prediction* objective.
+
+- Given the set of input and output parameters, determine how each parameter the distribution of cluster volumes. We will call this our *inference* objective.
+
+# Methodology
+
+To fulfill the objectives we pose in our introduction, we must collect more information about our modeling objectives. First, we have to define cluster volume in terms of the moments we are given. Since each simulation in our dataset represents a single row of three inputs $<Re, Fr, St>$ and four outputs $<E[X], E[X^2], E[X^3], E[X^4]>$ representing information about a *distribution* of several cluster volumes, we must consider that we are measuring the change in shape of a distribution of volumes rather than the volumes themselves. For this analysis, we defined key characteristics about these models in terms of these moments:
+
+1. Mean: $E[X]$
+2. Variance: $E[X^2] - E[X]^2$
+3. Skewness: $(\frac{E[X^3]}{E[X^2]})^2$
+4. Kurtosis: $\frac{E[X^4]}{E[X^2]^2}$
+
+Our goal here is not only to make interpretations of our model predictions simpler but also to attempt to find some distribution that connects these outputs to our input parameters. To do this, we must first examine how these model characteristics are distributed in our dataset.
+
+```{r EDA-chart-1, fig.height = 10, fig.width = 16}
 train_long %>%
   ggplot(aes(
     x = as.factor(predictor_value),
@@ -53,7 +81,7 @@ train_long %>%
 
 This table of graphs suggests the following key notes:
 
-1. The mean, variance, and skewness of the distribution of cluster volumes drops significantly as `Re` increases, while kurtosis appears to increase (polynomially?).
+1. The mean, variance, and skewness of the distribution of cluster volumes drops significantly as `Re` increases, while kurtosis appears to increase.
 
 2. There isn't a strong trend for `St` except to note that, as it increases, the maximum value of the mean, variance, and skewness increases fairly dramatically, but the kurtosis falls steadily. 
 
@@ -61,7 +89,7 @@ This table of graphs suggests the following key notes:
 
 Other things to note include:
 
-1. The variance and skewness of the distribution doesn't seem to be dependent on `St`. The mean and particularly the kurtosis of the distribution does appear to have some relationship with `St`, however, though kurtosis seems more closely related than the variance in what appears to be a roughly linear decline.
+1. The variance and skewness of the distribution don't seem to be dependent on `St`. The mean and particularly the kurtosis of the distribution does appear to have some relationship with `St`, however, though kurtosis seems more closely related than the variance in what appears to be a roughly linear decline.
 
 2. `Re` evokes a strong change in all of the distribution statistics as it increases, sharply reducing the variance in their distributions. I'd hypothesize that `Re` has a quadratic or otherwise polynomial effect on the distribution of the particle size, since it appears to change the variance and skewness of the set so sharply. 
 
@@ -70,25 +98,42 @@ Other things to note include:
 
 ```{r data-transformation, echo=FALSE}
 # account for the inf in Fr to be able to model
-train$Fr[train$Fr==Inf] <- 1
+train_aug <- train_aug %>%
+  mutate(
+    Fr = case_when(
+    Fr == Inf ~ 1,
+    TRUE ~ Fr)
+  )
 ```
 
 ```{r linear-regression-R1, echo=FALSE, results=FALSE}
-r1.lm.fit <- lm(R_moment_1 ~ St + Re + Fr, data = train)
-summary(r1.lm.fit)
-par(mfrow=c(2,2))
-plot(r1.lm.fit, which=c(2,1))
+moment_regression_fits <- train_aug %>%
+  dplyr::select(!c(mean, variance, skewness, kurtosis)) %>%
+  pivot_longer(cols = starts_with('R_moment'), names_to = 'moment', values_to = 'moment_value') %>%
+  group_by(moment) %>%
+  nest() %>%
+  mutate( # generate linear models
+    lm.fit.no_interactions = map(data, ~ lm(moment_value ~ St + Re + Fr, .)),
+    lm.fit.two_way = map(data, ~ lm(moment_value ~ .^2, .)),
+    nl.fit.two_degree = map(data, ~ lm(moment_value ~ polym(St, Re, Fr, degree=2), .))
+  ) %>%
+  mutate(
+    across(starts_with('lm') | starts_with('nl'), ~map(.x, ~summary(.x)), .names = '{.col}.summary'),
+    across()
+  )
 ```
-```{r linear-regression-R2, echo=FALSE, results=FALSE}
-r2.lm.fit <- lm(R_moment_2 ~ St + Re + Fr, data = train)
-summary(r2.lm.fit)
-par(mfrow=c(2,2))
-plot(r2.lm.fit, which=c(2,1))
+
+
+```{r moments, echo=FALSE, results=FALSE}
+par(mfrow = c(4, 2))
+for (lin_fit in moment_regression_fits$lm.fit.no_interactions) {
+  plot(lin_fit, which = c(2, 1))
+}
 ```
 
 
 ```{r linear-regression-R3, echo=FALSE, results=FALSE}
-r3.lm.fit <- lm(R_moment_3 ~ St + Re + Fr, data = train)
+r3.lm.fit <- lm(R_moment_3 ~ St + Re + Fr, data = train_aug)
 summary(r3.lm.fit)
 par(mfrow=c(2,2))
 plot(r3.lm.fit, which=c(2,1))
@@ -96,7 +141,7 @@ plot(r3.lm.fit, which=c(2,1))
 
 
 ```{r linear-regression-R4, echo=FALSE, results=FALSE}
-r4.lm.fit <- lm(R_moment_4 ~ St + Re + Fr, data = train)
+r4.lm.fit <- lm(R_moment_4 ~ St + Re + Fr, data = train_aug)
 summary(r4.lm.fit)
 par(mfrow=c(2,2))
 plot(r4.lm.fit, which=c(2,1))
@@ -160,4 +205,8 @@ Important takeaways from backward selection:
 1. In all three raw moments for which backward selection was done, St and Fr resulted in an interaction term as well as Re and Fr.  
 
 2. Both raw moment 3 and 4 contain all 3 interaction terms whereas raw moment 2 leaves out the interaction between St and Re.
+
+
+# References
+<div id = 'refs'></div>
 
