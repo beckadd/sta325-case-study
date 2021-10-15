@@ -5,11 +5,12 @@ date: "10/12/2021"
 output: pdf_document
 ---
 
-```{r import-packages}
+```{r import-packages, message=FALSE}
 library(tidyverse)
+library(MASS)
 ```
 
-```{r data-import}
+```{r data-import, message=FALSE}
 train <- read_csv('data/data-train.csv')
 test <- read_csv('data/data-test.csv')
 ```
@@ -135,4 +136,28 @@ Attempting polynomial regression suggests the following key notes:
 1. Polynomial regression only benefited raw moment 1, increasing its adjusted $R^2$ to 0.9646 and reducing its RSE to 0.01051. The QQ plot now follows a more linear pattern and the residual vs fitted plot also better follows the line of best fit. Thus, this suggests a polynomial model is better suited for raw moment 1.
 
 2. Raw moments 2, 3, and 4 did not benefit from a polynomial model, each still suffered from a low $R^2$ and very high RSE.
+
+```{r R2 interaction terms, echo=FALSE, results=FALSE}
+r2.lm.interact <- lm(R_moment_2 ~ .^2 , data = subset(train, select = -c(R_moment_1,R_moment_3, R_moment_4)))
+stepAIC(r2.lm.interact,direction="backward")
+```
+
+
+```{r R3 interaction terms, echo=FALSE, results=FALSE}
+r3.lm.interact <- lm(R_moment_3 ~ .^2 , data = subset(train, select = -c(R_moment_1,R_moment_2, R_moment_4)))
+stepAIC(r3.lm.interact,direction="backward")
+```
+
+
+```{r R4 interaction terms, echo=FALSE, results=FALSE}
+r4.lm.interact <- lm(R_moment_4 ~ .^2 , data = subset(train, select = -c(R_moment_1,R_moment_2, R_moment_3)))
+stepAIC(r4.lm.interact,direction="backward")
+```
+
+
+Important takeaways from backward selection:
+
+1. In all three raw moments for which backward selection was done, St and Fr resulted in an interaction term as well as Re and Fr.  
+
+2. Both raw moment 3 and 4 contain all 3 interaction terms whereas raw moment 2 leaves out the interaction between St and Re.
 
