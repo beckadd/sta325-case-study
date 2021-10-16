@@ -61,7 +61,11 @@ moment_regression_fits <- train_aug %>%
   mutate( # generate linear models
     lm.fit.no_interactions = map(data, ~ lm(moment_value ~ St + Re + Fr, .)),
     lm.fit.two_way = map(data, ~ stepAIC(lm(moment_value ~ .^2, .), direction = 'backward')),
-    nl.fit.two_degree = map(data, ~ lm(moment_value ~ polym(St, Re, Fr, degree=2), .))
+    nl.fit.two_degree = map(data, ~ lm(moment_value ~ polym(St, Re, Fr, degree=2), .)),
+    lm.fit.no_interactions_lt = map(data, ~lm(log(moment_value) ~ St + Re + Fr, .)),
+    lm.fit.two_way_lt = map(data, ~stepAIC(lm(log(moment_value) ~ .^2, .), direction = 'backward')),
+    nl.fit.two_degree_lt = map(data, ~lm(log(moment_value) ~ polym(St, Re, Fr, degree=2), .)),
+    nl.fit.two_degree_lt_selected = map(data, ~step(lm(log(moment_value) ~ polym(St, Re, Fr, degree=2), .), direction = 'backward'))
   ) %>%
   mutate( # generate summaries from the linear models
     across(starts_with('lm') | starts_with('nl'), ~map(.x, ~summary(.x)), .names = '{.col}.summary')
@@ -75,7 +79,11 @@ statistic_regression_fits <- train_aug %>%
   mutate( # generate linear models
     lm.fit.no_interactions = map(data, ~ lm(statistic_value ~ St + Re + Fr, .)),
     lm.fit.two_way = map(data, ~ stepAIC(lm(statistic_value ~ .^2, .), direction = 'backward')),
-    nl.fit.two_degree = map(data, ~ lm(statistic_value ~ polym(St, Re, Fr, degree=2), .))
+    nl.fit.two_degree = map(data, ~ lm(statistic_value ~ polym(St, Re, Fr, degree=2), .)),
+    lm.fit.no_interactions_lt = map(data, ~lm(log(statistic_value) ~ St + Re + Fr, .)),
+    lm.fit.two_way_lt = map(data, ~stepAIC(lm(log(statistic_value) ~ .^2, .), direction = 'backward')),
+    nl.fit.two_degree_lt = map(data, ~lm(log(statistic_value) ~ polym(St, Re, Fr, degree=2), .)),
+    nl.fit.two_degree_lt_selected = map(data, ~step(lm(log(statistic_value) ~ polym(St, Re, Fr, degree=2), .), direction = 'backward'))
   ) %>%
   mutate( # generate summaries from the linear models
     across(starts_with('lm') | starts_with('nl'), ~map(.x, ~summary(.x)), .names = '{.col}.summary')
@@ -114,19 +122,57 @@ train_long %>%
   geom_boxplot() +
   facet_wrap(vars(predictor, statistic), scales = "free") +
   labs(
-    title = "Figure 1. Distribution Statistics across values of Fr, St, and Re",
+    title = "Figure 1. Distribution of Statistics across values of Fr, St, and Re",
     x = "Fr",
     y = "Statistic Value"
   )
 ```
-We noted from our EDA that the variance and skewness of the dataset appeared to drop dramatically with increasing values of $Fr$ and of $Re$, and that there seemed to be a possible interaction between 
+
+We noted from our EDA (see Figure 1) that the variance and skewness of the dataset appeared to drop dramatically with increasing values of $Fr$ and of $Re$, and that there seemed to be a possible covariance between the two variables, hinting at an interaction. otherwise, we also noted that the rate at which this interaction variable influenced the data appeared to be either inversely polynomial (rational) or otherwise hyperbolic. 
+
+We investigated this in our assessments of the raw moments as well, and found that the distributions were roughly equal, which is unsurprising given that the statistics are derived from the raw moments.
+
+Thus, we hypothesized that the model that would best fit this data would likely look polynomial and have interactions between at least $Re$ and $Fr$ - conceptually, this makes sense, as the turbulence an object faces and the acceleration it undergoes due to gravity might both increase the rate of mixing, leading to uniformly sized clusters. 
+
+We created three sets of models across each of the statistics and raw moments (Appendix B); we created a baseline linear model without any interaction variables where each of the raw moments/statistics acted as the response to the set of predictors $<Re, Fr, St>$. We did the same for a linear model with two way interactions which we then performed backwards selection on, optimizing with AIC. Finally, we created a 2-degree polynomial model to measure any squared interactions.
+
+After creating these models, we noted several key lines of evidence to indicate that there were interactions present between $Re$ and $St$ and $Re$ and $Fr$. We also found that our polynomial model predicting $E[X]$ (the mean) had an excellent fit to the data and showed a low RSE.
+
+We settled on the polynomial model for $E[X]$. For the others, we noted that the residual plots (Appendix B) hinted at a necessary transformation in the response variable, as there was clear deviation from the fitted values as they approached larger values of the moment. Therefore, we log-transformed the predictor of our linear models to see if this would improve model accuracy. 
+
+Upon producing log-transformed models for each of the original models, we found much higher accuracy without being overfit. In particular, all of the log-transformed two-degree models showed high adjusted R. squared after backwards selection with AIC and with BIC (used to verify the results in AIC). We settled on the log-transformed raw moments for prediction, since this will provide the most predictive power regardless of interpretability.
 
 
+
+With this evidence settled on the following predictive models for the raw moments:
+
+1. $\log{E[X]}$
+2. $\log{E[X^2]}$
+3. $\log{E[X^3]}$
+4. $\log{E[X^4]}$
 
 # References
 <div id = 'refs'></div>
 
-# Appendix A: Notes on the EDA chart
+# Appendix A: EDA
+
+## Figure 1
+
+```{r fig.height = 10, fig.width = 16}
+train_long %>%
+  ggplot(aes(
+    x = as.factor(predictor_value),
+    y = statistic_value,
+    color = statistic
+  )) +
+  geom_boxplot() +
+  facet_wrap(vars(predictor, statistic), scales = "free") +
+  labs(
+    title = "Figure 1. Distribution of Statistics across values of Fr, St, and Re",
+    x = "Fr",
+    y = "Statistic Value"
+  )
+```
 
 This table of graphs suggests the following key notes:
 
@@ -144,6 +190,30 @@ Other things to note include:
 
 3. `Fr` evokes similar changes in the variance and skewness of the distribution as `Re`, but not in the kurtosis and mean. This could mean there is some interaction effect in the second moment of the data between `Re` and `St`.
 
+
+## Figure 2
+
+```{r fig.height = 10, fig.width = 16}
+train %>%
+  pivot_longer(cols = starts_with('R_moment'), names_to = 'moment', values_to = 'moment_value') %>%
+  pivot_longer(cols = c(St, Re, Fr), names_to = 'predictor', values_to = 'predictor_value') %>%
+  mutate(
+    predictor = fct_relevel(predictor, c('Re', 'St', 'Fr'))
+  ) %>%
+  ggplot(aes(
+    x = as.factor(predictor_value),
+    y = moment_value,
+    color = moment
+  )) +
+  geom_boxplot() +
+  facet_wrap(vars(predictor, moment), scales = "free") +
+  labs(
+    title = "Figure 2. Distribution of Moments across values of Fr, St, and Re",
+    x = "Fr",
+    y = "Moment Value"
+  )
+```
+
 # Appendix B: Residual and Q-Q Plots 
 
 ## Raw Moments as Response Variables
@@ -158,8 +228,7 @@ names = data$moment
 ```{r lm-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.no_interactions, names), ~ plot(..1, which = c(2, 1)))
-
-walk(data$lm.fit.no_interactions, ~tidy(summary(.x)))
+map(data$lm.fit.no_interactions.summary, ~tidy(.))
 ```
 
 In the graphs above, we've plotted the residuals and Normal Q-Q plots for all of our linear regressions where each of the raw moments represents a response variable to the three predictors $<Re, Fr, St>$. The first row represents information with the first raw moment as the response, the second row represents the second raw moment, and so on. For this first assessment, we have no interaction variables.
@@ -177,6 +246,7 @@ These attempts of linear regression suggests the following key notes:
 ```{r two-way-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.two_way, names), ~ plot(..1, which = c(2, 1)))
+map(data$lm.fit.two_way.summary, ~tidy(.))
 ```
 
 Important takeaways from backward selection:
@@ -191,6 +261,7 @@ Important takeaways from backward selection:
 ```{r nonlinear-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$nl.fit.two_degree, names), ~ plot(..1, which = c(2, 1)))
+map(data$nl.fit.two_degree.summary, ~tidy(.))
 ```
 
 Here again, we now compare a set of 2-degree nonlinear polynomial regression models, again with each of the raw moments as response variables to the predictor set from before.
@@ -200,6 +271,26 @@ Attempting polynomial regression suggests the following key notes:
 1. Polynomial regression only benefited raw moment 1, increasing its adjusted $R^2$ to 0.9646 and reducing its RSE to 0.01051. The QQ plot now follows a more linear pattern and the residual vs fitted plot also better follows the line of best fit. Thus, this suggests a polynomial model is better suited for raw moment 1.
 
 2. Raw moments 2, 3, and 4 did not benefit from a polynomial model, each still suffered from a low $R^2$ and very high RSE.
+
+### Log-transformed models
+
+```{r lt-no-interactions-plots-moments, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$lm.fit.no_interactions_lt, names), ~ plot(..1, which = c(2, 1)))
+map(data$lm.fit.no_interactions_lt.summary, ~tidy(.))
+```
+
+```{r lt-two-way-plots-moments, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$lm.fit.two_way_lt, names), ~ plot(..1, which = c(2, 1)))
+map(data$lm.fit.two_way_lt.summary, ~tidy(.))
+```
+
+```{r lt-two-degree-plots-moments, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$nl.fit.two_degree_lt, names), ~ plot(..1, which = c(2, 1)))
+map(data$nl.fit.two_degree_lt.summary, ~tidy(.))
+```
 
 ## Mean/Variance/Skewness/Kurtosis as Response Variables
 
@@ -213,6 +304,7 @@ names = data$statistic
 ```{r lm-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.no_interactions, names), ~ plot(..1, which = c(2, 1)))
+map(data$lm.fit.no_interactions.summary, ~tidy(.))
 ```
 
 ### Linear Models, 2-Way interactions with backward stepwise selection optimizing AIC
@@ -220,6 +312,7 @@ pwalk(list(data$lm.fit.no_interactions, names), ~ plot(..1, which = c(2, 1)))
 ```{r two-way-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.two_way, names), ~ plot(..1, which = c(2, 1)))
+map(data$lm.fit.two_way.summary, ~tidy(.))
 ```
 
 ### Nonlinear Models, 2-degree polynomials
@@ -227,4 +320,25 @@ pwalk(list(data$lm.fit.two_way, names), ~ plot(..1, which = c(2, 1)))
 ```{r nonlinear-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$nl.fit.two_degree, names), ~ plot(..1, which = c(2, 1)))
+map(data$nl.fit.two_degree.summary, ~tidy(.))
+```
+
+### Log-transformed Models
+
+```{r lt-no-interactions-plots-stats, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$lm.fit.no_interactions_lt, names), ~ plot(..1, which = c(2, 1)))
+map(data$lm.fit.no_interactions_lt.summary, ~tidy(.))
+```
+
+```{r lt-two-way-plots-stats, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$lm.fit.two_way_lt, names), ~ plot(..1, which = c(2, 1)))
+map(data$lm.fit.two_way_lt.summary, ~tidy(.))
+```
+
+```{r lt-two-degree-plots-stats, fig.height= 10}
+par(mfrow = c(4, 2))
+pwalk(list(data$nl.fit.two_degree_lt, names), ~ plot(..1, which = c(2, 1)))
+map(data$nl.fit.two_degree_lt.summary, ~tidy(.))
 ```
