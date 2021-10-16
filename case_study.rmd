@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = FALSE)
 ```{r import-packages, message=FALSE}
 library(tidyverse)
 library(broom)
+library(knitr)
 library(MASS)
 ```
 
@@ -146,8 +147,8 @@ Upon producing log-transformed models for each of the original models, we found 
 
 With this evidence settled on the following predictive models for the raw moments:
 
-1. $\log{E[X]}$
-2. $\log{E[X^2]}$
+
+2. $\log{E[X^2]} = (5.599, -28.268, -10.562) \cdot (St, Re, Fr) + (-4.953, (St^2, Re^2, Fr^2) + (St, Re, 0) + (St, 0, Fr) + (0, Re, Fr)$
 3. $\log{E[X^3]}$
 4. $\log{E[X^4]}$
 
@@ -228,7 +229,7 @@ names = data$moment
 ```{r lm-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.no_interactions, names), ~ plot(..1, which = c(2, 1)))
-map(data$lm.fit.no_interactions.summary, ~tidy(.))
+map(data$lm.fit.no_interactions.summary, ~ tidy(.) %>% kable(digits = 3))
 ```
 
 In the graphs above, we've plotted the residuals and Normal Q-Q plots for all of our linear regressions where each of the raw moments represents a response variable to the three predictors $<Re, Fr, St>$. The first row represents information with the first raw moment as the response, the second row represents the second raw moment, and so on. For this first assessment, we have no interaction variables.
@@ -246,7 +247,7 @@ These attempts of linear regression suggests the following key notes:
 ```{r two-way-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.two_way, names), ~ plot(..1, which = c(2, 1)))
-map(data$lm.fit.two_way.summary, ~tidy(.))
+map(data$lm.fit.two_way.summary, ~ tidy(.) %>% kable(digits = 3))
 ```
 
 Important takeaways from backward selection:
@@ -261,7 +262,7 @@ Important takeaways from backward selection:
 ```{r nonlinear-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$nl.fit.two_degree, names), ~ plot(..1, which = c(2, 1)))
-map(data$nl.fit.two_degree.summary, ~tidy(.))
+map(data$nl.fit.two_degree.summary, ~ tidy(.) %>% kable(digits = 3))
 ```
 
 Here again, we now compare a set of 2-degree nonlinear polynomial regression models, again with each of the raw moments as response variables to the predictor set from before.
@@ -277,19 +278,19 @@ Attempting polynomial regression suggests the following key notes:
 ```{r lt-no-interactions-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.no_interactions_lt, names), ~ plot(..1, which = c(2, 1)))
-map(data$lm.fit.no_interactions_lt.summary, ~tidy(.))
+map(data$lm.fit.no_interactions_lt.summary, ~ tidy(.) %>% kable(digits = 3))
 ```
 
 ```{r lt-two-way-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.two_way_lt, names), ~ plot(..1, which = c(2, 1)))
-map(data$lm.fit.two_way_lt.summary, ~tidy(.))
+map(data$lm.fit.two_way_lt.summary, ~ tidy(.) %>% kable(digits = 3))
 ```
 
 ```{r lt-two-degree-plots-moments, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$nl.fit.two_degree_lt, names), ~ plot(..1, which = c(2, 1)))
-map(data$nl.fit.two_degree_lt.summary, ~tidy(.))
+map(data$nl.fit.two_degree_lt.summary, ~ tidy(.) %>% kable(digits = 3))
 ```
 
 ## Mean/Variance/Skewness/Kurtosis as Response Variables
@@ -304,7 +305,7 @@ names = data$statistic
 ```{r lm-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.no_interactions, names), ~ plot(..1, which = c(2, 1)))
-map(data$lm.fit.no_interactions.summary, ~tidy(.))
+map(data$lm.fit.no_interactions.summary, ~tidy(.) %>% kable(digits = 3))
 ```
 
 ### Linear Models, 2-Way interactions with backward stepwise selection optimizing AIC
@@ -312,7 +313,7 @@ map(data$lm.fit.no_interactions.summary, ~tidy(.))
 ```{r two-way-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.two_way, names), ~ plot(..1, which = c(2, 1)))
-map(data$lm.fit.two_way.summary, ~tidy(.))
+map(data$lm.fit.two_way.summary, ~tidy(.) %>% kable(digits = 3))
 ```
 
 ### Nonlinear Models, 2-degree polynomials
@@ -320,7 +321,7 @@ map(data$lm.fit.two_way.summary, ~tidy(.))
 ```{r nonlinear-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$nl.fit.two_degree, names), ~ plot(..1, which = c(2, 1)))
-map(data$nl.fit.two_degree.summary, ~tidy(.))
+map(data$nl.fit.two_degree.summary, ~tidy(.) %>% kable(digits = 3))
 ```
 
 ### Log-transformed Models
@@ -328,17 +329,35 @@ map(data$nl.fit.two_degree.summary, ~tidy(.))
 ```{r lt-no-interactions-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.no_interactions_lt, names), ~ plot(..1, which = c(2, 1)))
-map(data$lm.fit.no_interactions_lt.summary, ~tidy(.))
+map(data$lm.fit.no_interactions_lt.summary, ~tidy(.) %>% kable(digits = 3))
 ```
 
 ```{r lt-two-way-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$lm.fit.two_way_lt, names), ~ plot(..1, which = c(2, 1)))
-map(data$lm.fit.two_way_lt.summary, ~tidy(.))
+map(data$lm.fit.two_way_lt.summary, ~tidy(.) %>% kable(digits = 3))
 ```
 
 ```{r lt-two-degree-plots-stats, fig.height= 10}
 par(mfrow = c(4, 2))
 pwalk(list(data$nl.fit.two_degree_lt, names), ~ plot(..1, which = c(2, 1)))
-map(data$nl.fit.two_degree_lt.summary, ~tidy(.))
+map(data$nl.fit.two_degree_lt.summary, ~tidy(.) %>% kable(digits = 3))
+```
+
+
+```{r prediction-with-selected-models}
+tested <- test %>%
+  mutate(
+    Fr = case_when(
+      Fr == Inf ~ 1,
+      TRUE ~ Fr
+    )
+  )
+
+tested$R_moment_1 = predict(data$nl.fit.two_degree_lt_selected[[1]], tested)
+tested$R_moment_2 = predict(data$nl.fit.two_degree_lt_selected[[2]], tested)
+tested$R_moment_3 = predict(data$nl.fit.two_degree_lt_selected[[3]], tested)
+tested$R_moment_4 = predict(data$nl.fit.two_degree_lt_selected[[4]], tested)
+
+write.csv(tested, 'test-results.csv', row.names = FALSE)
 ```
