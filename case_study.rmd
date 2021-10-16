@@ -144,13 +144,167 @@ We settled on the polynomial model for $E[X]$. For the others, we noted that the
 Upon producing log-transformed models for each of the original models, we found much higher accuracy without being overfit. In particular, all of the log-transformed two-degree models showed high adjusted R. squared after backwards selection with AIC and with BIC (used to verify the results in AIC). We settled on the log-transformed raw moments for prediction, since this will provide the most predictive power regardless of interpretability.
 
 
+# Results
 
-With this evidence settled on the following predictive models for the raw moments:
+We settled on the following models for each of the raw moments:
+
+$$
+\log{E[X]} = 
+-5.055 +
+\begin{bmatrix}
+1.858 \\
+-0.612 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+St \\
+St^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-20.277 \\
+5.242 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+Re \\
+Re^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-0.11 \\
+0.529 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+Fr \\
+Fr^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-1.291 \\
+6.492 \\
+4.162 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+St + Re \\
+Re + Fr \\
+St + Fr \\
+\end{bmatrix}
+$$ 
+$$
+\log{E[X^2]} = 
+-1.784 + 
+\begin{bmatrix}
+5.599 \\
+-4.953 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+St \\
+St^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-28.268 \\
+5.085 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+Re \\
+Re^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-10.562 \\
+12.463 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+Fr \\
+Fr^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-16.802 \\
+90.305 \\
+4.359 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+St + Re \\
+Re + Fr \\
+St + Fr \\
+\end{bmatrix}
+$$ 
+$$
+\log{E[X^3]} = 
+7.447 + 
+\begin{bmatrix}
+3.997 \\
+-5.282 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+St \\
+St^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-18.488 \\
+0.355 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+Re \\
+Re^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-20.582 \\
+23.718 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+Fr \\
+Fr^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-20.306 \\
+162.526 \\
+0.738 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+St + Re \\
+Re + Fr \\
+St + Fr \\
+\end{bmatrix}
+$$
+$$
+\log{E[X^4]} = 
+9.274 + 
+\begin{bmatrix}
+-1.889 \\
+-0.02 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+St \\
+St^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+9.541 \\
+-4.668 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+Re \\
+Re^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-9.938 \\
+11.157 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+Fr \\
+Fr^2 \\
+\end{bmatrix} +
+\begin{bmatrix}
+-1.88 \\
+71.556 \\
+-5.262 \\
+\end{bmatrix}^T
+\begin{bmatrix}
+St + Re \\
+Re + Fr \\
+St + Fr \\
+\end{bmatrix}
+$$ 
+The interpretation of these raw moments is long-winded, but there are a few key variables to highlight as they represent the "prime movers" of the predicted value of each raw moment. 
 
 
-2. $\log{E[X^2]} = (5.599, -28.268, -10.562) \cdot (St, Re, Fr) + (-4.953, (St^2, Re^2, Fr^2) + (St, Re, 0) + (St, 0, Fr) + (0, Re, Fr)$
-3. $\log{E[X^3]}$
-4. $\log{E[X^4]}$
+# Conclusion
+
 
 # References
 <div id = 'refs'></div>
@@ -345,7 +499,7 @@ map(data$nl.fit.two_degree_lt.summary, ~tidy(.) %>% kable(digits = 3))
 ```
 
 
-```{r prediction-with-selected-models}
+```{r prediction-with-selected-models, eval=FALSE, include=FALSE}
 tested <- test %>%
   mutate(
     Fr = case_when(
@@ -354,10 +508,10 @@ tested <- test %>%
     )
   )
 
-tested$R_moment_1 = predict(data$nl.fit.two_degree_lt_selected[[1]], tested)
-tested$R_moment_2 = predict(data$nl.fit.two_degree_lt_selected[[2]], tested)
-tested$R_moment_3 = predict(data$nl.fit.two_degree_lt_selected[[3]], tested)
-tested$R_moment_4 = predict(data$nl.fit.two_degree_lt_selected[[4]], tested)
+tested$R_moment_1 = predict(moment_regression_fits$nl.fit.two_degree_lt_selected[[1]], tested)
+tested$R_moment_2 = predict(moment_regression_fits$nl.fit.two_degree_lt_selected[[2]], tested)
+tested$R_moment_3 = predict(moment_regression_fits$nl.fit.two_degree_lt_selected[[3]], tested)
+tested$R_moment_4 = predict(moment_regression_fits$nl.fit.two_degree_lt_selected[[4]], tested)
 
 write.csv(tested, 'test-results.csv', row.names = FALSE)
 ```
